@@ -1,9 +1,12 @@
 use crate::chunk::Chunk;
-use crate::scanner::scan;
+use crate::scanner_new::Scanner;
 
 pub fn compile(input: String) -> Chunk {
-    let tokens = scan(input);
     loop {
-
+        let sc = Scanner::new(input.as_bytes());
     }
+}
+
+fn expression() {
+
 }

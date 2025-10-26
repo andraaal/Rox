@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use itertools::Itertools;
 use std::iter::Peekable;
 use std::str::Chars;
@@ -69,7 +70,7 @@ pub fn scan(src: String) {
                     while indent_level > 0 {
                         if char == None {
                             tokens.push(Token {
-                                token_type: ErrorToken("Unclosed block comment.".to_string()),
+                                token_type: ErrorToken(Cow::Owned("Unclosed block comment.".to_string())),
                                 line,
                             });
                         } else if char == Some('*') && source.peek() == Some(&'/') {
@@ -161,7 +162,7 @@ pub fn scan(src: String) {
                 }
                 literal.shrink_to_fit();
                 Token {
-                    token_type: StringLiteral(literal),
+                    token_type: StringLiteral(b"wrong"), // satisfy the compiler
                     line,
                 }
             }
@@ -213,7 +214,7 @@ pub fn scan(src: String) {
                         "true" => True,
                         "var" => Var,
                         "while" => While,
-                        other => Identifier(other.to_string()),
+                        other => Identifier(b"wrong"),
                     };
 
                     Token {
@@ -222,7 +223,7 @@ pub fn scan(src: String) {
                     }
                 } else {
                     Token {
-                        token_type: ErrorToken("Unknown char".to_string()),
+                        token_type: ErrorToken(Cow::Owned("Unknown char".to_string())),
                         line,
                     }
                 }
@@ -242,7 +243,7 @@ fn match_char(source: &mut Peekable<Chars>, ch: char) -> bool {
     result
 }
 
-pub enum TokenType {
+pub enum TokenType<'a> {
     LeftBracket,
     RightBracket,
     LeftBrace,
@@ -264,14 +265,15 @@ pub enum TokenType {
     GreaterEqual,
     Less,
     LessEqual,
-    Identifier(String),
-    StringLiteral(String),
+    Identifier(&'a [u8]),
+    StringLiteral(&'a [u8]),
     NumberLiteral(f64),
     And,
     Class,
     Else,
     False,
     For,
+    Fun,
     If,
     Nil,
     Or,
@@ -282,10 +284,10 @@ pub enum TokenType {
     True,
     Var,
     While,
-    ErrorToken(String),
+    ErrorToken(Cow<'a, String>),
 }
 
-struct Token {
-    token_type: TokenType,
-    line: usize,
+pub struct Token<'a> {
+    pub token_type: TokenType<'a>,
+    pub line: usize,
 }

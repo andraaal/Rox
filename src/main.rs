@@ -7,6 +7,7 @@ mod debug;
 mod vm;
 mod compiler;
 mod scanner;
+mod scanner_new;
 
 fn main() {
     let mut args = std::env::args();
