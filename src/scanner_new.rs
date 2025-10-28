@@ -1,5 +1,4 @@
 use crate::scanner::{Token, TokenType};
-use std::borrow::Cow;
 
 #[derive(Debug)]
 pub struct Scanner<'a> {
@@ -8,8 +7,15 @@ pub struct Scanner<'a> {
     line: usize,
 }
 
+#[derive(Debug, thiserror::Error)]
+#[error("{reason} in line {line}")]
+pub struct ScannerError {
+    reason: String,
+    line: usize,
+}
+
 impl<'a> Iterator for Scanner<'a> {
-    type Item = Token<'a>;
+    type Item = Result<Token<'a>, ScannerError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.is_at_end() {
@@ -17,7 +23,10 @@ impl<'a> Iterator for Scanner<'a> {
         }
 
         if let Err(error_message) = self.skip_whitespace() {
-            return Some(self.make_token(TokenType::ErrorToken(Cow::Owned(error_message))));
+            return Some(Err(ScannerError {
+                reason: error_message,
+                line: self.line,
+            }));
         }
         let ch = self.source[self.current];
         self.current += 1;
@@ -81,10 +90,10 @@ impl<'a> Iterator for Scanner<'a> {
                     self.current = end;
                     self.make_token(TokenType::StringLiteral(&self.source[begin - 1..end]))
                 } else {
-                    self.make_token(TokenType::ErrorToken(Cow::Owned(format!(
-                        "Unterminated string literal: {}",
-                        self.line
-                    ))))
+                    return Some(Err(ScannerError {
+                        reason: "Unterminated string literal".to_string(),
+                        line: self.line,
+                    }));
                 }
             }
             b'0'..=b'9' => {
@@ -116,19 +125,17 @@ impl<'a> Iterator for Scanner<'a> {
                 self.current = end;
 
                 if let Err(error_message) = num {
-                    self.make_token(TokenType::ErrorToken(Cow::Owned(format!(
-                        "{} in line {}",
-                        error_message.to_string(),
-                        self.line
-                    ))))
+                    return Some(Err(ScannerError {
+                        reason: error_message.to_string(),
+                        line: self.line,
+                    }));
                 } else {
                     let parsed = num.unwrap().parse::<f64>();
                     if let Err(error_message) = parsed {
-                        self.make_token(TokenType::ErrorToken(Cow::Owned(format!(
-                            "{} in line {}",
-                            error_message.to_string(),
-                            self.line
-                        ))))
+                        return Some(Err(ScannerError {
+                            reason: error_message.to_string(),
+                            line: self.line,
+                        }));
                     } else {
                         self.make_token(TokenType::NumberLiteral(parsed.unwrap()))
                     }
@@ -180,13 +187,15 @@ impl<'a> Iterator for Scanner<'a> {
                 };
                 token
             }
-            err => self.make_token(TokenType::ErrorToken(Cow::Owned(format!(
-                "Invalid character '{}' in line {}.",
-                err, self.line
-            )))),
+            err => {
+                return Some(Err(ScannerError {
+                    reason: format!("Invalid character '{err}'"),
+                    line: self.line,
+                }));
+            }
         };
 
-        Some(tk)
+        Some(Ok(tk))
     }
 }
 impl<'a> Scanner<'a> {

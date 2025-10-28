@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use itertools::Itertools;
 use std::iter::Peekable;
 use std::str::Chars;
@@ -69,10 +68,8 @@ pub fn scan(src: String) {
 
                     while indent_level > 0 {
                         if char == None {
-                            tokens.push(Token {
-                                token_type: ErrorToken(Cow::Owned("Unclosed block comment.".to_string())),
-                                line,
-                            });
+                            // throw error here
+                            todo!()
                         } else if char == Some('*') && source.peek() == Some(&'/') {
                             indent_level -= 1;
                         } else if char == Some('/') && source.peek() == Some(&'*') {
@@ -214,18 +211,13 @@ pub fn scan(src: String) {
                         "true" => True,
                         "var" => Var,
                         "while" => While,
-                        other => Identifier(b"wrong"),
+                        _ => Identifier(b"wrong"),
                     };
 
-                    Token {
-                        token_type,
-                        line,
-                    }
+                    Token { token_type, line }
                 } else {
-                    Token {
-                        token_type: ErrorToken(Cow::Owned("Unknown char".to_string())),
-                        line,
-                    }
+                    // Throw error here
+                    todo!()
                 }
             }
         };
@@ -243,6 +235,7 @@ fn match_char(source: &mut Peekable<Chars>, ch: char) -> bool {
     result
 }
 
+#[derive(Debug)]
 pub enum TokenType<'a> {
     LeftBracket,
     RightBracket,
@@ -284,9 +277,9 @@ pub enum TokenType<'a> {
     True,
     Var,
     While,
-    ErrorToken(Cow<'a, String>),
 }
 
+#[derive(Debug)]
 pub struct Token<'a> {
     pub token_type: TokenType<'a>,
     pub line: usize,
