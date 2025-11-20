@@ -1,6 +1,7 @@
-use crate::chunk::{Chunk, OpCode, Value};
+use crate::chunk::{Chunk, OpCode};
 use crate::debug::print_instruction;
 use crate::compiler;
+use crate::value::Value;
 
 pub struct Vm {
     chunk: Chunk,
@@ -71,13 +72,14 @@ impl Vm {
                             "No value to perform operation on.",
                         );
                     };
-                    *x = (-1 as Value) * *x;
+                    *x =  Value::from(-1.0 * x.as_float());
+                    // TODO Could optimize here, just change first bit
                 }
-                OpCode::OpAdd => self.binary_operation(|a, b| a + b),
-                OpCode::OpSubtract => self.binary_operation(|a, b| a - b),
-                OpCode::OpMultiply => self.binary_operation(|a, b| a * b),
-                OpCode::OpDivide => self.binary_operation(|a, b| a / b),
-                OpCode::OpModulo => self.binary_operation(|a, b| a % b),
+                OpCode::OpAdd => self.binary_operation(|a, b| Value::from(a.as_float() + b.as_float())),
+                OpCode::OpSubtract => self.binary_operation(|a, b| Value::from(a.as_float() - b.as_float())),
+                OpCode::OpMultiply => self.binary_operation(|a, b| Value::from(a.as_float() * b.as_float())),
+                OpCode::OpDivide => self.binary_operation(|a, b| Value::from(a.as_float() / b.as_float())),
+                OpCode::OpModulo => self.binary_operation(|a, b| Value::from(a.as_float() % b.as_float())),
             }
 
             // DEBUG begin

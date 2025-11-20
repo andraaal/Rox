@@ -157,7 +157,7 @@ impl<'a> Parser<'a> {
     }
 
     fn emit_constant(&mut self, value: f64, token: Token<'_>) {
-        let index = self.current_chunk().push_constant(value);
+        let index = self.current_chunk().push_constant(value.into());
         if index > u8::MAX as usize {
             self.report_error_at(token, "Too many constants");
         } else {

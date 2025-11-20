@@ -1,3 +1,5 @@
+use crate::value::Value;
+
 #[repr(u8)]
 #[derive(Copy, Clone, Debug)]
 pub enum OpCode {
@@ -13,7 +15,6 @@ pub enum OpCode {
 
 // When you add an opcode, don't forget to adjust the try_into implementation
 
-pub type Value = f64;
 
 pub struct Chunk {
     code: Vec<u8>,
