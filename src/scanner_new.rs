@@ -1,4 +1,4 @@
-use crate::scanner::{Token, TokenType};
+use crate::scanner::{Token, TokenType, TokenValue};
 
 #[derive(Debug)]
 pub struct Scanner<'a> {
@@ -8,7 +8,7 @@ pub struct Scanner<'a> {
 }
 
 #[derive(Debug, thiserror::Error)]
-#[error("{reason} in line {line}")]
+#[error("[line: {line}]: {reason}")]
 pub struct ScannerError {
     reason: String,
     line: usize,
@@ -32,6 +32,7 @@ impl<'a> Iterator for Scanner<'a> {
         self.current += 1;
 
         let tk = match ch {
+            b'%' => self.make_token(TokenType::Percent),
             b'(' => self.make_token(TokenType::LeftParenthesis),
             b')' => self.make_token(TokenType::RightParenthesis),
             b'{' => self.make_token(TokenType::LeftBrace),
@@ -88,7 +89,10 @@ impl<'a> Iterator for Scanner<'a> {
                 if !self.is_at_end() {
                     let begin = self.current;
                     self.current = end;
-                    self.make_token(TokenType::StringLiteral(&self.source[begin - 1..end]))
+                    self.make_token_with_content(
+                        TokenType::StringLiteral,
+                        TokenValue::StringLiteral(&self.source[begin - 1..end]),
+                    )
                 } else {
                     return Some(Err(ScannerError {
                         reason: "Unterminated string literal".to_string(),
@@ -137,7 +141,10 @@ impl<'a> Iterator for Scanner<'a> {
                             line: self.line,
                         }));
                     } else {
-                        self.make_token(TokenType::NumberLiteral(parsed.unwrap()))
+                        self.make_token_with_content(
+                            TokenType::NumberLiteral,
+                            TokenValue::NumberLiteral(std::borrow::Cow::Owned(parsed.unwrap())),
+                        )
                     }
                 }
             }
@@ -211,10 +218,19 @@ impl<'a> Scanner<'a> {
         self.current >= self.source.len()
     }
 
-    fn make_token(&self, ty: TokenType<'a>) -> Token<'a> {
+    fn make_token(&self, ty: TokenType) -> Token<'a> {
         Token {
             token_type: ty,
             line: self.line,
+            value: None,
+        }
+    }
+
+    fn make_token_with_content(&self, tk: TokenType, val: TokenValue<'a>) -> Token<'a> {
+        Token {
+            token_type: tk,
+            line: self.line,
+            value: Some(val),
         }
     }
 
@@ -287,7 +303,7 @@ impl<'a> Scanner<'a> {
         Ok(())
     }
 
-    fn match_keyword(&mut self, reference: &[u8], ttp: TokenType<'a>) -> Token<'a> {
+    fn match_keyword(&mut self, reference: &[u8], ttp: TokenType) -> Token<'a> {
         let mut end = self.current;
         for &c in reference {
             if Some(c) != self.source.get(end).copied() {
@@ -296,13 +312,10 @@ impl<'a> Scanner<'a> {
             end += 1;
         }
         self.current = end;
-        Token {
-            token_type: ttp,
-            line: self.line,
-        }
+        self.make_token(ttp)
     }
 
-    // Maybe we already know a few characters and don't need to scan everything thus => we can specify a custom start point
+    // Maybe we already know a few characters and don't need to scan everything and thus => we can specify a custom start point
     fn match_identifier(&mut self, mut end: usize) -> Token<'a> {
         while let Some(&cha) = self.source.get(end) {
             if !cha.is_ascii_alphanumeric() && cha != b'_' {
@@ -310,11 +323,8 @@ impl<'a> Scanner<'a> {
             }
             end += 1;
         }
-        let token = TokenType::StringLiteral(&self.source[self.current - 1..end]);
+        let token_val = &self.source[self.current - 1..end];
         self.current = end;
-        Token {
-            token_type: token,
-            line: self.line,
-        }
+        self.make_token_with_content(TokenType::Identifier, TokenValue::Identifier(token_val))
     }
 }

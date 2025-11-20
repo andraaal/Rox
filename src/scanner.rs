@@ -1,286 +1,127 @@
-use itertools::Itertools;
-use std::iter::Peekable;
-use std::str::Chars;
+use std::borrow::Cow;
+use std::fmt::{Display, Formatter};
 use TokenType::*;
 
-pub fn scan(src: String) {
-    let mut line = 1;
-    let mut tokens: Vec<Token> = Vec::with_capacity(src.len() / 3);
-    let mut source = src.chars().peekable();
-    loop {
-        let Some(ch) = source.next() else {
-            break;
-        };
-        let token = match ch {
-            '(' => Token {
-                token_type: LeftParenthesis,
-                line,
-            },
-            ')' => Token {
-                token_type: RightParenthesis,
-                line,
-            },
-            '{' => Token {
-                token_type: LeftBrace,
-                line,
-            },
-            '}' => Token {
-                token_type: RightBrace,
-                line,
-            },
-            ';' => Token {
-                token_type: Semicolon,
-                line,
-            },
-            ',' => Token {
-                token_type: Comma,
-                line,
-            },
-            '.' => Token {
-                token_type: Dot,
-                line,
-            },
-            '-' => Token {
-                token_type: Minus,
-                line,
-            },
-            '+' => Token {
-                token_type: Plus,
-                line,
-            },
-            '*' => Token {
-                token_type: Star,
-                line,
-            },
-            '/' => {
-                // Single line comment
-                if match_char(&mut source, '/') {
-                    let mut char = source.next();
-                    while char != None && char != Some('\n') {
-                        char = source.next();
-                    }
-                    line += 1;
-                    continue;
-                // Nestable block comment
-                } else if match_char(&mut source, '*') {
-                    let mut char = source.next();
-                    let mut indent_level = 1;
-
-                    while indent_level > 0 {
-                        if char == None {
-                            // throw error here
-                            todo!()
-                        } else if char == Some('*') && source.peek() == Some(&'/') {
-                            indent_level -= 1;
-                        } else if char == Some('/') && source.peek() == Some(&'*') {
-                            indent_level += 1;
-                        }
-                        char = source.next();
-                    }
-                    continue;
-                // Division
-                } else {
-                    Token {
-                        token_type: Slash,
-                        line,
-                    }
-                }
-            }
-            '!' => {
-                // Not equal
-                if match_char(&mut source, '=') {
-                    Token {
-                        token_type: BangEqual,
-                        line,
-                    }
-                // Not
-                } else {
-                    Token {
-                        token_type: Bang,
-                        line,
-                    }
-                }
-            }
-            '=' => {
-                // Equal
-                if match_char(&mut source, '=') {
-                    Token {
-                        token_type: EqualEqual,
-                        line,
-                    }
-                // Assign
-                } else {
-                    Token {
-                        token_type: Equal,
-                        line,
-                    }
-                }
-            }
-            '<' => {
-                // Smaller or equal
-                if match_char(&mut source, '=') {
-                    Token {
-                        token_type: LessEqual,
-                        line,
-                    }
-                // Strictly smaller
-                } else {
-                    Token {
-                        token_type: Less,
-                        line,
-                    }
-                }
-            }
-            '>' => {
-                // Greater or equal
-                if match_char(&mut source, '=') {
-                    Token {
-                        token_type: GreaterEqual,
-                        line,
-                    }
-                // Strictly greater
-                } else {
-                    Token {
-                        token_type: Greater,
-                        line,
-                    }
-                }
-            }
-            // String literal
-            '"' => {
-                let mut literal = String::with_capacity(10);
-                let mut char = source.next();
-                while char != Some('"') {
-                    if char == None {
-                        break; //raise error here
-                    }
-                    literal.push(char.unwrap());
-                    char = source.next();
-                }
-                literal.shrink_to_fit();
-                Token {
-                    token_type: StringLiteral(b"wrong"), // satisfy the compiler
-                    line,
-                }
-            }
-            // Number literal
-            '0'..='9' => {
-                // TODO: trailing dots cause problems
-                // FIX: Don't use iterator, iterate manually over &str in the loop
-                let lit = source
-                    .peeking_take_while(|ch| ch.is_ascii_digit() || ch == &'.')
-                    .collect::<String>();
-                Token {
-                    token_type: NumberLiteral(lit.parse().unwrap()),
-                    line,
-                }
-            }
-            // Increase line count
-            '\n' => {
-                line += 1;
-                continue;
-            }
-            // Skip whitespace
-            ' ' | '\r' | '\t' => {
-                continue;
-            }
-            // Keyword / Identifier
-            _ => {
-                if ch.is_ascii_alphabetic() || ch == '_' {
-                    // start with the already-consumed char, then consume the rest
-                    let mut ident = String::with_capacity(8);
-                    ident.push(ch);
-                    let rest = source
-                        .peeking_take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
-                        .collect::<String>();
-                    ident.push_str(&rest);
-
-                    let token_type = match ident.as_str() {
-                        "and" => And,
-                        "class" => Class,
-                        "else" => Else,
-                        "false" => False,
-                        "for" => For,
-                        "if" => If,
-                        "nil" => Nil,
-                        "or" => Or,
-                        "print" => Print,
-                        "return" => Return,
-                        "super" => Super,
-                        "this" => This,
-                        "true" => True,
-                        "var" => Var,
-                        "while" => While,
-                        _ => Identifier(b"wrong"),
-                    };
-
-                    Token { token_type, line }
-                } else {
-                    // Throw error here
-                    todo!()
-                }
-            }
-        };
-
-        source.next();
-        tokens.push(token);
-    }
-}
-
-fn match_char(source: &mut Peekable<Chars>, ch: char) -> bool {
-    let result = source.peek() == Some(&ch);
-    if result {
-        source.next();
-    }
-    result
-}
-
-#[derive(Debug)]
-pub enum TokenType<'a> {
-    LeftBracket,
-    RightBracket,
-    LeftBrace,
-    RightBrace,
-    LeftParenthesis,
-    RightParenthesis,
-    Comma,
-    Dot,
-    Minus,
-    Plus,
-    Semicolon,
-    Slash,
-    Star,
-    Bang,
-    BangEqual,
-    Equal,
-    EqualEqual,
-    Greater,
-    GreaterEqual,
-    Less,
-    LessEqual,
-    Identifier(&'a [u8]),
-    StringLiteral(&'a [u8]),
-    NumberLiteral(f64),
-    And,
-    Class,
-    Else,
-    False,
-    For,
-    Fun,
-    If,
-    Nil,
-    Or,
-    Print,
-    Return,
-    Super,
-    This,
-    True,
-    Var,
-    While,
+#[repr(u8)]
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub enum TokenType {
+    LeftBracket = 0,
+    RightBracket = 1,
+    LeftBrace = 2,
+    RightBrace = 3,
+    LeftParenthesis = 4,
+    RightParenthesis = 5,
+    Comma = 6,
+    Dot = 7,
+    Minus = 8,
+    Plus = 9,
+    Semicolon = 10,
+    Slash = 11,
+    Star = 12,
+    Bang = 13,
+    BangEqual = 14,
+    Equal = 15,
+    EqualEqual = 16,
+    Greater = 17,
+    GreaterEqual = 18,
+    Less = 19,
+    LessEqual = 20,
+    Identifier = 21,
+    StringLiteral = 22,
+    NumberLiteral = 23,
+    And = 24,
+    Class = 25,
+    Else = 26,
+    False = 27,
+    For = 28,
+    Fun = 29,
+    If = 30,
+    Nil = 31,
+    Or = 32,
+    Print = 33,
+    Return = 34,
+    Super = 35,
+    This = 36,
+    True = 37,
+    Var = 38,
+    While = 39,
+    Percent = 40,
+    _TokenCount = 41,
 }
 
 #[derive(Debug)]
 pub struct Token<'a> {
-    pub token_type: TokenType<'a>,
+    pub token_type: TokenType,
     pub line: usize,
+    pub value: Option<TokenValue<'a>>,
+}
+
+#[derive(Debug)]
+pub enum TokenValue<'a> {
+    NumberLiteral(Cow<'a, f64>),
+    Identifier(&'a [u8]),
+    StringLiteral(&'a [u8]),
+}
+
+impl Display for TokenValue<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TokenValue::NumberLiteral(cow) => write!(f, "{}", cow),
+            TokenValue::Identifier(iden) => write!(f, "{}", String::from_utf8_lossy(iden)),
+            TokenValue::StringLiteral(lit) => write!(f, "{}", String::from_utf8_lossy(lit)),
+        }
+    }
+}
+
+impl<'a> Display for Token<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self.token_type {
+            LeftBracket => write!(f, "["),
+            RightBracket => write!(f, "]"),
+            LeftBrace => write!(f, "{{"),
+            RightBrace => write!(f, "}}"),
+            LeftParenthesis => write!(f, "("),
+            RightParenthesis => write!(f, ")"),
+            Comma => write!(f, ","),
+            Dot => write!(f, "."),
+            Minus => write!(f, "-"),
+            Plus => write!(f, "+"),
+            Semicolon => write!(f, ";"),
+            Slash => write!(f, "/"),
+            Star => write!(f, "*"),
+            Bang => write!(f, "!"),
+            BangEqual => write!(f, "!="),
+            Equal => write!(f, "="),
+            EqualEqual => write!(f, "=="),
+            Greater => write!(f, ">"),
+            GreaterEqual => write!(f, ">="),
+            Less => write!(f, "<"),
+            LessEqual => write!(f, "<="),
+            And => write!(f, "and"),
+            Class => write!(f, "class"),
+            Else => write!(f, "else"),
+            False => write!(f, "false"),
+            For => write!(f, "for"),
+            Fun => write!(f, "fun"),
+            If => write!(f, "if"),
+            Nil => write!(f, "nil"),
+            Or => write!(f, "or"),
+            Print => write!(f, "print"),
+            Return => write!(f, "return"),
+            Super => write!(f, "super"),
+            This => write!(f, "this"),
+            True => write!(f, "true"),
+            Var => write!(f, "var"),
+            While => write!(f, "while"),
+            Percent => write!(f, "%"),
+            _TokenCount => write!(f, "<! Internal Token Count !>"),
+            Identifier | StringLiteral | NumberLiteral => {
+                if let Some(val) = &self.value {
+                    write!(f, "{}", val)
+                } else {
+                    unreachable!("Found literal or identifier without value -> Error in Scanner")
+                }
+            }
+        }
+    }
 }

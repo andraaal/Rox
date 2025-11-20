@@ -29,20 +29,21 @@ impl Vm {
         self.stack.clear();
     }
 
-    pub fn interpret(&mut self, file: String) -> InterpretResult {
-        compiler::compile(file);
-        return InterpretResult::InterpretOK;
+    pub fn interpret(file: String) -> InterpretResult {
+        let ch = Chunk::new(8, 4);
+        let parser = compiler::Parser::new(&file);
+        let success = parser.compile();
+        if !success {
+            return InterpretResult::InterpretError("Error");
+        }
+        let mut vm = Vm::new(ch);
+        vm.run()
     }
     pub fn run(&mut self) -> InterpretResult {
+        println!();
         loop {
             // Disable for efficient interpretation
             // DEBUG begin
-            print!("\nStack: ");
-            for val in self.stack.iter() {
-                print!("[ {} ]", val)
-            }
-            println!();
-
             print_instruction(&self.chunk, self.ip);
             // DEBUG end
 
@@ -78,6 +79,15 @@ impl Vm {
                 OpCode::OpDivide => self.binary_operation(|a, b| a / b),
                 OpCode::OpModulo => self.binary_operation(|a, b| a % b),
             }
+
+            // DEBUG begin
+            print!("Stack: ");
+            for val in self.stack.iter() {
+                print!("[ {} ]", val)
+            }
+            println!();
+            println!();
+            // DEBUG end
         }
     }
 

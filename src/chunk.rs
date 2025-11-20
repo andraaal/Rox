@@ -11,14 +11,14 @@ pub enum OpCode {
     OpModulo = 7,
 }
 
-// When you add opcode, don't forget to adjust the try_into implementation
+// When you add an opcode, don't forget to adjust the try_into implementation
 
 pub type Value = f64;
 
 pub struct Chunk {
     code: Vec<u8>,
     constants: Vec<Value>,
-    lines: Vec<u32>,
+    lines: Vec<usize>,
 }
 
 impl Chunk {
@@ -26,16 +26,29 @@ impl Chunk {
         Chunk {
             code: Vec::with_capacity(capacity),
             constants: Vec::with_capacity(const_capacity),
-            lines: Vec::with_capacity(capacity),
+            lines: Vec::with_capacity(capacity / 6),
         }
     }
-    pub fn push_code(&mut self, code: u8, line: u32) {
+    pub fn push_code(&mut self, code: u8, line: usize) {
         self.code.push(code);
         self.lines.push(line);
     }
 
-    pub fn push_constant(&mut self, constant: Value) {
+    pub fn push_constant(&mut self, constant: Value) -> usize {
         self.constants.push(constant);
+        self.constants.len() -1
+    }
+
+    pub fn shrink(&mut self, name: &str) {
+        let code_len = self.code.capacity();
+        let const_len = self.constants.capacity();
+        self.code.shrink_to_fit();
+        self.constants.shrink_to_fit();
+
+        // DEBUG
+        println!("=== Chunk {} ===", name);
+        println!("Shrank byte code vector by {} to {} entries", code_len - self.code.capacity(), self.code.capacity());
+        println!("Shrank constant vector by {} to {} entries\n", const_len - self.constants.capacity(), self.constants.capacity());
     }
 
     pub fn code(&self) -> &[u8] {
@@ -46,7 +59,7 @@ impl Chunk {
         &self.constants
     }
 
-    pub fn lines(&self) -> &[u32] {
+    pub fn lines(&self) -> &[usize] {
         &self.lines
     }
 }
