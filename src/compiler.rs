@@ -1,19 +1,18 @@
-use std::borrow::Cow;
 use crate::chunk::Chunk;
-use crate::chunk::OpCode::{OpAdd, OpConstant, OpDivide, OpModulo, OpMultiply, OpNegate, OpReturn, OpSubtract};
-use crate::scanner::TokenType::RightParenthesis;
-use crate::scanner::{Token, TokenType, TokenValue};
-use crate::scanner_new::Scanner;
-use std::cmp::PartialOrd;
+use crate::chunk::OpCode::*;
 use crate::debug::print_chunk;
+use crate::scanner::Scanner;
+use crate::token::{Token, TokenType, TokenValue};
+use crate::value::Value;
 use crate::vm::Vm;
+use std::borrow::Cow;
 
 pub struct Parser<'a> {
     had_error: bool,
     panicking: bool,
     scanner: Scanner<'a>,
     chunk: Chunk,
-    lookahead: Option<Token<'a>>
+    lookahead: Option<Token<'a>>,
 }
 
 impl<'a> Parser<'a> {
@@ -29,7 +28,7 @@ impl<'a> Parser<'a> {
 
     pub fn compile(mut self) -> bool {
         self.expression();
-        self.emit_byte(OpReturn as u8, 1);
+        self.emit_byte(Return as u8, 1);
         if !self.had_error {
             print_chunk(&self.chunk, "Main");
             self.chunk.shrink("Main");
@@ -55,7 +54,7 @@ impl<'a> Parser<'a> {
         } else {
             self.report_error_at_end("Expected expression, but found EOF.");
         }
-        
+
         while let Some(token) = self.peek_token() {
             let next_rule = get_rule(token.token_type);
             if next_rule.precedence >= precedence {
@@ -68,24 +67,33 @@ impl<'a> Parser<'a> {
             }
         }
     }
+    // 53550127
+    fn constant(&mut self, token: Token) {
+        match token.token_type {
+            TokenType::True => self.emit_constant(true.into(), token),
+            TokenType::False => self.emit_constant(false.into(), token),
+            TokenType::Nil => self.emit_constant(Value::create_nil(), token),
+            _ => panic!("This is not a constant: {}", token),
+        }
+    }
 
     fn number(&mut self, number_token: Token) {
         if let Some(TokenValue::NumberLiteral(Cow::Owned(num))) = number_token.value {
-            self.emit_constant(num, number_token);
+            self.emit_constant(num.into(), number_token);
         }
     }
 
     fn grouping(&mut self, _: Token) {
         // Maybe use that one day for error reporting
         self.expression();
-        self.expect_token_type(RightParenthesis, "Expected ')'");
+        self.expect_token_type(TokenType::RightParenthesis, "Expected ')'");
     }
 
     fn unary(&mut self, operator: Token<'_>) {
         self.parse_precedence(Precedence::Unary);
 
         match operator.token_type {
-            TokenType::Minus => self.emit_byte(OpNegate as u8, operator.line),
+            TokenType::Minus => self.emit_byte(Negate as u8, operator.line),
             TokenType::Bang => todo!(),
             _ => panic!("This is not an unary operator {:?}", operator),
         }
@@ -95,16 +103,22 @@ impl<'a> Parser<'a> {
         self.parse_precedence(next_precedence);
 
         match operator.token_type {
-            TokenType::Plus => self.emit_byte(OpAdd as u8, operator.line),
-            TokenType::Minus => self.emit_byte(OpSubtract as u8, operator.line),
-            TokenType::Star => self.emit_byte(OpMultiply as u8, operator.line),
-            TokenType::Slash => self.emit_byte(OpDivide as u8, operator.line),
-            TokenType::Percent => self.emit_byte(OpModulo as u8, operator.line),
+            TokenType::Plus => self.emit_byte(Add as u8, operator.line),
+            TokenType::Minus => self.emit_byte(Subtract as u8, operator.line),
+            TokenType::Star => self.emit_byte(Multiply as u8, operator.line),
+            TokenType::Slash => self.emit_byte(Divide as u8, operator.line),
+            TokenType::Percent => self.emit_byte(Modulo as u8, operator.line),
+            TokenType::EqualEqual => self.emit_byte(Equal as u8, operator.line),
+            TokenType::BangEqual => self.emit_byte(NotEqual as u8, operator.line),
+            TokenType::Greater => self.emit_byte(Greater as u8, operator.line),
+            TokenType::GreaterEqual => self.emit_byte(GreaterEqual as u8, operator.line),
+            TokenType::Less => self.emit_byte(Less as u8, operator.line),
+            TokenType::LessEqual => self.emit_byte(LessEqual as u8, operator.line),
             _ => panic!("This is not a binary operator: {}", operator),
         }
     }
 
-    fn peek_token(&mut self) -> &Option<Token<'a>>{
+    fn peek_token(&mut self) -> &Option<Token<'a>> {
         if self.lookahead.is_none() {
             self.lookahead = self.next_token();
         }
@@ -156,12 +170,12 @@ impl<'a> Parser<'a> {
         self.current_chunk().push_code(byte, line)
     }
 
-    fn emit_constant(&mut self, value: f64, token: Token<'_>) {
-        let index = self.current_chunk().push_constant(value.into());
+    fn emit_constant(&mut self, value: Value, token: Token<'_>) {
+        let index = self.current_chunk().push_constant(value);
         if index > u8::MAX as usize {
             self.report_error_at(token, "Too many constants");
         } else {
-            self.emit_byte(OpConstant as u8, token.line);
+            self.emit_byte(Constant as u8, token.line);
             self.emit_byte(index as u8, token.line);
         }
     }
@@ -180,35 +194,6 @@ enum Precedence {
     Unary,
     Call,
     Primary,
-}
-
-#[derive(Debug)]
-pub struct PrecedenceError(u8);
-
-impl TryFrom<u8> for Precedence {
-    // Not used right now, but maybe someday I will
-    type Error = PrecedenceError;
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        const VARIANTS: [Precedence; 11] = [
-            Precedence::None,
-            Precedence::Assignment,
-            Precedence::Or,
-            Precedence::And,
-            Precedence::Equality,
-            Precedence::Comparison,
-            Precedence::Term,
-            Precedence::Factor,
-            Precedence::Unary,
-            Precedence::Call,
-            Precedence::Primary,
-        ];
-
-        VARIANTS
-            .get(value as usize)
-            .copied()
-            .ok_or(PrecedenceError(value))
-    }
 }
 
 struct Rule {
@@ -310,9 +295,9 @@ const RULES: [Rule; RULES_LENGTH] = [
     },
     Rule {
         // BangEqual
-        precedence: Precedence::None,
+        precedence: Precedence::Comparison,
         prefix: None,
-        infix: None,
+        infix: Some(|p, t| p.binary(t, Precedence::Term)),
     },
     Rule {
         // Equal
@@ -322,33 +307,33 @@ const RULES: [Rule; RULES_LENGTH] = [
     },
     Rule {
         // EqualEqual
-        precedence: Precedence::None,
+        precedence: Precedence::Comparison,
         prefix: None,
-        infix: None,
+        infix: Some(|p, t| p.binary(t, Precedence::Term)),
     },
     Rule {
         // Greater
-        precedence: Precedence::None,
+        precedence: Precedence::Comparison,
         prefix: None,
-        infix: None,
+        infix: Some(|p, t| p.binary(t, Precedence::Term)),
     },
     Rule {
         // GreaterEqual
-        precedence: Precedence::None,
+        precedence: Precedence::Comparison,
         prefix: None,
-        infix: None,
+        infix: Some(|p, t| p.binary(t, Precedence::Term)),
     },
     Rule {
         // Less
-        precedence: Precedence::None,
+        precedence: Precedence::Comparison,
         prefix: None,
-        infix: None,
+        infix: Some(|p, t| p.binary(t, Precedence::Term)),
     },
     Rule {
         // LessEqual
-        precedence: Precedence::None,
+        precedence: Precedence::Comparison,
         prefix: None,
-        infix: None,
+        infix: Some(|p, t| p.binary(t, Precedence::Term)),
     },
     Rule {
         // Identifier
@@ -389,7 +374,7 @@ const RULES: [Rule; RULES_LENGTH] = [
     Rule {
         // False
         precedence: Precedence::None,
-        prefix: None,
+        prefix: Some(|p, t| p.constant(t)),
         infix: None,
     },
     Rule {
@@ -413,7 +398,7 @@ const RULES: [Rule; RULES_LENGTH] = [
     Rule {
         // Nil
         precedence: Precedence::None,
-        prefix: None,
+        prefix: Some(|p, t| p.constant(t)),
         infix: None,
     },
     Rule {
@@ -449,7 +434,7 @@ const RULES: [Rule; RULES_LENGTH] = [
     Rule {
         // True
         precedence: Precedence::None,
-        prefix: None,
+        prefix: Some(|p, t| p.constant(t)),
         infix: None,
     },
     Rule {
@@ -469,5 +454,5 @@ const RULES: [Rule; RULES_LENGTH] = [
         precedence: Precedence::Factor,
         prefix: None,
         infix: Some(|p, t| p.binary(t, Precedence::Unary)),
-    }
+    },
 ];

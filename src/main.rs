@@ -4,9 +4,9 @@ mod chunk;
 mod compiler;
 mod debug;
 mod scanner;
-mod scanner_new;
-mod vm;
+mod token;
 mod value;
+mod vm;
 
 fn main() {
     let mut args = std::env::args();
@@ -21,9 +21,6 @@ fn main() {
         parser.compile();
     } else {
         println!("Rox v0.1");
-        loop {
-            // println!("> ");
-            // REPL
-        }
+        // REPL
     }
 }

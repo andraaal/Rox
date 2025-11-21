@@ -1,7 +1,7 @@
 use crate::chunk::{Chunk, OpCode};
-use crate::debug::print_instruction;
 use crate::compiler;
-use crate::value::Value;
+use crate::debug::print_instruction;
+use crate::value::{Value, ValueType};
 
 pub struct Vm {
     chunk: Chunk,
@@ -53,7 +53,7 @@ impl Vm {
             };
 
             match op {
-                OpCode::OpReturn => {
+                OpCode::Return => {
                     if self.stack.len() > 0 {
                         println!("{}", self.stack.pop().unwrap());
                     } else {
@@ -61,25 +61,31 @@ impl Vm {
                     }
                     return InterpretResult::InterpretOK;
                 }
-                OpCode::OpConstant => {
+                OpCode::Constant => {
                     let index = self.read_byte() as usize;
                     let constant = self.chunk.constants()[index];
                     self.stack.push(constant);
                 }
-                OpCode::OpNegate => {
+                OpCode::Negate => {
                     let Some(x) = self.stack.last_mut() else {
                         return InterpretResult::InterpretRuntimeError(
                             "No value to perform operation on.",
                         );
                     };
-                    *x =  Value::from(-1.0 * x.as_float());
-                    // TODO Could optimize here, just change first bit
+                    *x = Value::from(-1.0 * x.as_float());
+                    // TODO Could optimize here, just need to change first bit
                 }
-                OpCode::OpAdd => self.binary_operation(|a, b| Value::from(a.as_float() + b.as_float())),
-                OpCode::OpSubtract => self.binary_operation(|a, b| Value::from(a.as_float() - b.as_float())),
-                OpCode::OpMultiply => self.binary_operation(|a, b| Value::from(a.as_float() * b.as_float())),
-                OpCode::OpDivide => self.binary_operation(|a, b| Value::from(a.as_float() / b.as_float())),
-                OpCode::OpModulo => self.binary_operation(|a, b| Value::from(a.as_float() % b.as_float())),
+                OpCode::Add => self.numeric_binary_operation(|a, b| Value::from(a + b)),
+                OpCode::Subtract => self.numeric_binary_operation(|a, b| Value::from(a - b)),
+                OpCode::Multiply => self.numeric_binary_operation(|a, b| Value::from(a * b)),
+                OpCode::Divide => self.numeric_binary_operation(|a, b| Value::from(a / b)),
+                OpCode::Modulo => self.numeric_binary_operation(|a, b| Value::from(a % b)),
+                OpCode::Greater => self.numeric_binary_operation(|a, b| Value::from(a > b)),
+                OpCode::GreaterEqual => self.numeric_binary_operation(|a, b| Value::from(a >= b)),
+                OpCode::Less => self.numeric_binary_operation(|a, b| Value::from(a < b)),
+                OpCode::LessEqual => self.numeric_binary_operation(|a, b| Value::from(a <= b)),
+                OpCode::Equal => self.binary_operation(|a, b| Value::from(a == b)),
+                OpCode::NotEqual => self.binary_operation(|a, b| Value::from(a != b)),
             }
 
             // DEBUG begin
@@ -106,5 +112,21 @@ impl Vm {
         let b = self.stack.pop().expect("No value to perform operation on.");
         let a = self.stack.pop().expect("No value to perform operation on.");
         self.stack.push(callback(a, b));
+    }
+
+    fn numeric_binary_operation<F>(&mut self, callback: F)
+    where
+        F: Fn(f64, f64) -> Value,
+    {
+        let b = self.stack.pop().expect("No value to perform operation on.");
+        let a = self.stack.pop().expect("No value to perform operation on.");
+        if !a.is(ValueType::Number) || !b.is(ValueType::Number) {
+            self.runtime_error("Both operands must be numbers");
+        }
+        self.stack.push(callback(a.as_float(), b.as_float()));
+    }
+
+    fn runtime_error(&mut self, message: &'static str) {
+        println!("[ERROR] in line {}: {}", self.ip, message);
     }
 }

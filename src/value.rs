@@ -1,10 +1,12 @@
 use std::fmt::{Display, Formatter};
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Value {
     value: u64,
 }
 
+// If all of these bits are set it is a quiet NaN (this doesn't get produced as an error)
+// We use these QNAN values to store other data types
 const QNAN: u64 = 0x7ffc000000000000;
 const NIL_VAL: u64 = QNAN | 0x1;
 const FALSE_VAL: u64 = QNAN | 0x2;
@@ -18,7 +20,7 @@ pub enum ValueType {
 }
 
 impl Value {
-    pub fn is(&self, value_type: ValueType) -> bool {
+    pub fn is(&self, value_type: ValueType) -> bool { // Redundant, but I like this method :)))
         match value_type {
             ValueType::Number => self.value & QNAN != QNAN,
             ValueType::Boolean => self.value == TRUE_VAL || self.value == FALSE_VAL,
@@ -49,7 +51,7 @@ impl Value {
     }
 
     pub fn as_bool(&self) -> bool {
-        (self.value & 0x1) == 0
+        self.value == TRUE_VAL
     }
 }
 

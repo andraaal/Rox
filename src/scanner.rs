@@ -1,127 +1,340 @@
-use std::borrow::Cow;
-use std::fmt::{Display, Formatter};
-use TokenType::*;
-
-#[repr(u8)]
-#[derive(Copy, Clone, PartialEq, Debug)]
-pub enum TokenType {
-    LeftBracket = 0,
-    RightBracket = 1,
-    LeftBrace = 2,
-    RightBrace = 3,
-    LeftParenthesis = 4,
-    RightParenthesis = 5,
-    Comma = 6,
-    Dot = 7,
-    Minus = 8,
-    Plus = 9,
-    Semicolon = 10,
-    Slash = 11,
-    Star = 12,
-    Bang = 13,
-    BangEqual = 14,
-    Equal = 15,
-    EqualEqual = 16,
-    Greater = 17,
-    GreaterEqual = 18,
-    Less = 19,
-    LessEqual = 20,
-    Identifier = 21,
-    StringLiteral = 22,
-    NumberLiteral = 23,
-    And = 24,
-    Class = 25,
-    Else = 26,
-    False = 27,
-    For = 28,
-    Fun = 29,
-    If = 30,
-    Nil = 31,
-    Or = 32,
-    Print = 33,
-    Return = 34,
-    Super = 35,
-    This = 36,
-    True = 37,
-    Var = 38,
-    While = 39,
-    Percent = 40,
-    _TokenCount = 41,
-}
+use crate::token::{Token, TokenType, TokenValue};
 
 #[derive(Debug)]
-pub struct Token<'a> {
-    pub token_type: TokenType,
-    pub line: usize,
-    pub value: Option<TokenValue<'a>>,
+pub struct Scanner<'a> {
+    source: &'a [u8],
+    current: usize,
+    line: usize,
 }
 
-#[derive(Debug)]
-pub enum TokenValue<'a> {
-    NumberLiteral(Cow<'a, f64>),
-    Identifier(&'a [u8]),
-    StringLiteral(&'a [u8]),
+#[derive(Debug, thiserror::Error)]
+#[error("[line: {line}]: {reason}")]
+pub struct ScannerError {
+    reason: String,
+    line: usize,
 }
 
-impl Display for TokenValue<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            TokenValue::NumberLiteral(cow) => write!(f, "{}", cow),
-            TokenValue::Identifier(iden) => write!(f, "{}", String::from_utf8_lossy(iden)),
-            TokenValue::StringLiteral(lit) => write!(f, "{}", String::from_utf8_lossy(lit)),
+impl<'a> Iterator for Scanner<'a> {
+    type Item = Result<Token<'a>, ScannerError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.is_at_end() {
+            return None;
         }
-    }
-}
 
-impl<'a> Display for Token<'a> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self.token_type {
-            LeftBracket => write!(f, "["),
-            RightBracket => write!(f, "]"),
-            LeftBrace => write!(f, "{{"),
-            RightBrace => write!(f, "}}"),
-            LeftParenthesis => write!(f, "("),
-            RightParenthesis => write!(f, ")"),
-            Comma => write!(f, ","),
-            Dot => write!(f, "."),
-            Minus => write!(f, "-"),
-            Plus => write!(f, "+"),
-            Semicolon => write!(f, ";"),
-            Slash => write!(f, "/"),
-            Star => write!(f, "*"),
-            Bang => write!(f, "!"),
-            BangEqual => write!(f, "!="),
-            Equal => write!(f, "="),
-            EqualEqual => write!(f, "=="),
-            Greater => write!(f, ">"),
-            GreaterEqual => write!(f, ">="),
-            Less => write!(f, "<"),
-            LessEqual => write!(f, "<="),
-            And => write!(f, "and"),
-            Class => write!(f, "class"),
-            Else => write!(f, "else"),
-            False => write!(f, "false"),
-            For => write!(f, "for"),
-            Fun => write!(f, "fun"),
-            If => write!(f, "if"),
-            Nil => write!(f, "nil"),
-            Or => write!(f, "or"),
-            Print => write!(f, "print"),
-            Return => write!(f, "return"),
-            Super => write!(f, "super"),
-            This => write!(f, "this"),
-            True => write!(f, "true"),
-            Var => write!(f, "var"),
-            While => write!(f, "while"),
-            Percent => write!(f, "%"),
-            _TokenCount => write!(f, "<! Internal Token Count !>"),
-            Identifier | StringLiteral | NumberLiteral => {
-                if let Some(val) = &self.value {
-                    write!(f, "{}", val)
+        if let Err(error_message) = self.skip_whitespace() {
+            return Some(Err(ScannerError {
+                reason: error_message,
+                line: self.line,
+            }));
+        }
+        let ch = self.source[self.current];
+        self.current += 1;
+
+        let tk = match ch {
+            b'%' => self.make_token(TokenType::Percent),
+            b'(' => self.make_token(TokenType::LeftParenthesis),
+            b')' => self.make_token(TokenType::RightParenthesis),
+            b'{' => self.make_token(TokenType::LeftBrace),
+            b'}' => self.make_token(TokenType::RightBrace),
+            b',' => self.make_token(TokenType::Comma),
+            b'.' => self.make_token(TokenType::Dot),
+            b'-' => self.make_token(TokenType::Minus),
+            b'+' => self.make_token(TokenType::Plus),
+            b';' => self.make_token(TokenType::Semicolon),
+            b'*' => self.make_token(TokenType::Star),
+            b'/' => self.make_token(TokenType::Slash),
+            b'<' => {
+                if self.match_byte(b'=') {
+                    self.make_token(TokenType::LessEqual)
                 } else {
-                    unreachable!("Found literal or identifier without value -> Error in Scanner")
+                    self.make_token(TokenType::Less)
                 }
             }
+            b'>' => {
+                if self.match_byte(b'=') {
+                    self.make_token(TokenType::GreaterEqual)
+                } else {
+                    self.make_token(TokenType::Greater)
+                }
+            }
+            b'!' => {
+                if self.match_byte(b'=') {
+                    self.make_token(TokenType::BangEqual)
+                } else {
+                    self.make_token(TokenType::Bang)
+                }
+            }
+            b'=' => {
+                if self.match_byte(b'=') {
+                    self.make_token(TokenType::EqualEqual)
+                } else {
+                    self.make_token(TokenType::Equal)
+                }
+            }
+            b'"' => {
+                let mut end = self.current;
+                while let Some(&c) = self.source.get(end) {
+                    match c {
+                        b'"' => {
+                            break;
+                        }
+                        b'\n' => {
+                            self.line += 1;
+                        }
+                        _ => {}
+                    }
+                    end += 1;
+                }
+                if !self.is_at_end() {
+                    let begin = self.current;
+                    self.current = end;
+                    self.make_token_with_content(
+                        TokenType::StringLiteral,
+                        TokenValue::StringLiteral(&self.source[begin - 1..end]),
+                    )
+                } else {
+                    return Some(Err(ScannerError {
+                        reason: "Unterminated string literal".to_string(),
+                        line: self.line,
+                    }));
+                }
+            }
+            b'0'..=b'9' => {
+                let mut level: u8 = 0;
+                let mut end = self.current;
+                while let Some(&c) = self.source.get(end) {
+                    if c == b'.' && level == 0 {
+                        end += 1;
+                        level = 1;
+                        continue;
+                    }
+                    if (c == b'e' || c == b'E') && level < 2 {
+                        level = 2;
+                        end += 1;
+                        // optional + or - after exponent
+                        if let Some(&next) = self.source.get(end) {
+                            if next == b'+' || next == b'-' {
+                                end += 1;
+                            }
+                        }
+                        // require at least one digit in exponent; if none, stop before 'e'
+                        if self.source.get(end).map_or(true, |&d| d < b'0' || d > b'9') {
+                            end -= 1;
+                            if let Some(&next) = self.source.get(end) {
+                                if next == b'+' || next == b'-' {
+                                    end -= 1;
+                                }
+                            }
+                            break;
+                        }
+                        continue;
+                    }
+                    if c < b'0' || c > b'9' {
+                        end += 1;
+                        break;
+                    }
+                }
+
+                let num = String::from_utf8(self.source[self.current - 1..end].to_vec());
+                self.current = end;
+
+                if let Err(error_message) = num {
+                    return Some(Err(ScannerError {
+                        reason: error_message.to_string(),
+                        line: self.line,
+                    }));
+                } else {
+                    let parsed = num.unwrap().parse::<f64>();
+                    if let Err(error_message) = parsed {
+                        return Some(Err(ScannerError {
+                            reason: error_message.to_string(),
+                            line: self.line,
+                        }));
+                    } else {
+                        self.make_token_with_content(
+                            TokenType::NumberLiteral,
+                            TokenValue::NumberLiteral(std::borrow::Cow::Owned(parsed.unwrap())),
+                        )
+                    }
+                }
+            }
+            b'a'..=b'z' | b'A'..=b'Z' | b'_' => {
+                match ch {
+                    b'a' => self.match_keyword(b"nd", TokenType::And),
+                    b'c' => self.match_keyword(b"lass", TokenType::Class),
+                    b'e' => self.match_keyword(b"lse", TokenType::Else),
+
+                    b'f' => {
+                        if let Some(&next) = self.source.get(self.current) {
+                            match next {
+                                b'o' => self.match_keyword(b"or", TokenType::For),
+                                b'a' => self.match_keyword(b"alse", TokenType::False),
+                                b'u' => self.match_keyword(b"un", TokenType::Fun),
+                                _ => self.match_identifier(self.current),
+                            }
+                        } else {
+                            self.match_identifier(self.current)
+                        }
+                    }
+
+                    b'i' => self.match_keyword(b"f", TokenType::If),
+                    b'n' => self.match_keyword(b"il", TokenType::Nil),
+                    b'o' => self.match_keyword(b"r", TokenType::Or),
+                    b'p' => self.match_keyword(b"rint", TokenType::Print),
+                    b'r' => self.match_keyword(b"eturn", TokenType::Return),
+                    b's' => self.match_keyword(b"uper", TokenType::Super),
+
+                    b't' => {
+                        if let Some(&next) = self.source.get(self.current) {
+                            match next {
+                                b'h' => self.match_keyword(b"his", TokenType::This),
+                                b'r' => self.match_keyword(b"rue", TokenType::True),
+                                _ => self.match_identifier(self.current),
+                            }
+                        } else {
+                            self.match_identifier(self.current)
+                        }
+                    }
+
+                    b'v' => self.match_keyword(b"ar", TokenType::Var),
+                    b'w' => self.match_keyword(b"hile", TokenType::While),
+
+                    // no keyword
+                    _ => self.match_identifier(self.current),
+                }
+            }
+            err => {
+                return Some(Err(ScannerError {
+                    reason: format!("Invalid character '{err}'"),
+                    line: self.line,
+                }));
+            }
+        };
+
+        Some(Ok(tk))
+    }
+}
+impl<'a> Scanner<'a> {
+    pub fn new(s: &'a [u8]) -> Self {
+        Scanner {
+            source: s,
+            current: 0,
+            line: 0,
         }
+    }
+
+    fn is_at_end(&self) -> bool {
+        self.current >= self.source.len()
+    }
+
+    fn make_token(&self, ty: TokenType) -> Token<'a> {
+        Token {
+            token_type: ty,
+            line: self.line,
+            value: None,
+        }
+    }
+
+    fn make_token_with_content(&self, tk: TokenType, val: TokenValue<'a>) -> Token<'a> {
+        Token {
+            token_type: tk,
+            line: self.line,
+            value: Some(val),
+        }
+    }
+
+    fn match_byte(&mut self, ch: u8) -> bool {
+        if !self.is_at_end() && self.source[self.current] == ch {
+            self.current += 1;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn skip_whitespace(&mut self) -> Result<(), String> {
+        while let Some(&c) = self.source.get(self.current) {
+            match c {
+                b' ' | b'\t' | b'\r' => {
+                    self.current += 1;
+                }
+                b'\n' => {
+                    self.line += 1;
+                    self.current += 1;
+                }
+                b'/' => {
+                    if self.source.get(self.current + 1).copied() == Some(b'/') {
+                        self.skip_line_comment();
+                    } else if self.source.get(self.current + 1).copied() == Some(b'*') {
+                        if let Err(err) = self.skip_block_comment() {
+                            return Err(err);
+                        }
+                    } else {
+                        break;
+                    }
+                }
+                _ => break,
+            }
+        }
+        Ok(())
+    }
+
+    fn skip_line_comment(&mut self) {
+        self.current += 2;
+        while !self.is_at_end() && self.source.get(self.current).copied() != Some(b'\n') {
+            self.current += 1;
+        }
+    }
+
+    fn skip_block_comment(&mut self) -> Result<(), String> {
+        self.current += 2;
+        let mut level = 1;
+        while level > 0 {
+            match self.source.get(self.current) {
+                Some(b'*') if self.source.get(self.current + 1).copied() == Some(b'/') => {
+                    self.current += 2;
+                    level -= 1;
+                }
+                Some(b'/') if self.source.get(self.current + 1).copied() == Some(b'*') => {
+                    self.current += 2;
+                    level += 1;
+                }
+                Some(b'\n') => {
+                    self.line += 1;
+                    self.current += 1;
+                }
+                Some(_) => {
+                    self.current += 1;
+                }
+                None => return Err(format!("Unterminated block comment: {}", self.line)),
+            }
+        }
+        Ok(())
+    }
+
+    fn match_keyword(&mut self, reference: &[u8], ttp: TokenType) -> Token<'a> {
+        let mut end = self.current;
+        for &c in reference {
+            if Some(c) != self.source.get(end).copied() {
+                return self.match_identifier(end);
+            }
+            end += 1;
+        }
+        self.current = end;
+        self.make_token(ttp)
+    }
+
+    // Maybe we already know a few characters and don't need to scan everything and thus => we can specify a custom start point
+    fn match_identifier(&mut self, mut end: usize) -> Token<'a> {
+        while let Some(&cha) = self.source.get(end) {
+            if !cha.is_ascii_alphanumeric() && cha != b'_' {
+                break;
+            }
+            end += 1;
+        }
+        let token_val = &self.source[self.current - 1..end];
+        self.current = end;
+        self.make_token_with_content(TokenType::Identifier, TokenValue::Identifier(token_val))
     }
 }

@@ -24,14 +24,20 @@ pub fn print_instruction(chunk: &Chunk, offset: usize) -> usize {
     };
 
     match op {
-        OpCode::OpReturn => simple_instruction("OP_RETURN", offset),
-        OpCode::OpConstant => constant_instruction("OP_CONSTANT", chunk, offset),
-        OpCode::OpNegate => simple_instruction("OP_NEGATE", offset),
-        OpCode::OpAdd => simple_instruction("OP_ADD", offset),
-        OpCode::OpSubtract => simple_instruction("OP_SUBTRACT", offset),
-        OpCode::OpMultiply => simple_instruction("OP_MULTIPLY", offset),
-        OpCode::OpDivide => simple_instruction("OP_DIVIDE", offset),
-        OpCode::OpModulo => simple_instruction("OP_MODULO", offset),
+        OpCode::Return => simple_instruction("RETURN", offset),
+        OpCode::Constant => constant_instruction("CONSTANT", chunk, offset),
+        OpCode::Negate => simple_instruction("NEGATE", offset),
+        OpCode::Add => simple_instruction("ADD", offset),
+        OpCode::Subtract => simple_instruction("SUBTRACT", offset),
+        OpCode::Multiply => simple_instruction("MULTIPLY", offset),
+        OpCode::Divide => simple_instruction("DIVIDE", offset),
+        OpCode::Modulo => simple_instruction("MODULO", offset),
+        OpCode::Greater => simple_instruction("GREATER", offset),
+        OpCode::GreaterEqual => simple_instruction("GREATER_EQUAL", offset),
+        OpCode::Less => simple_instruction("LESS", offset),
+        OpCode::LessEqual => simple_instruction("LESS_EQUAL", offset),
+        OpCode::Equal => simple_instruction("EQUAL", offset),
+        OpCode::NotEqual => simple_instruction("NOT_EQUAL", offset),
     }
 }
 

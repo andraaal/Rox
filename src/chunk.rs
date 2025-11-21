@@ -3,18 +3,23 @@ use crate::value::Value;
 #[repr(u8)]
 #[derive(Copy, Clone, Debug)]
 pub enum OpCode {
-    OpReturn = 0,
-    OpConstant = 1,
-    OpNegate = 2,
-    OpAdd = 3,
-    OpSubtract = 4,
-    OpMultiply = 5,
-    OpDivide = 6,
-    OpModulo = 7,
+    Return = 0,
+    Constant = 1,
+    Negate = 2,
+    Add = 3,
+    Subtract = 4,
+    Multiply = 5,
+    Divide = 6,
+    Modulo = 7,
+    Greater = 8,
+    GreaterEqual = 9,
+    Less = 10,
+    LessEqual = 11,
+    Equal = 12,
+    NotEqual = 13,
 }
 
 // When you add an opcode, don't forget to adjust the try_into implementation
-
 
 pub struct Chunk {
     code: Vec<u8>,
@@ -74,14 +79,20 @@ impl TryFrom<u8> for OpCode {
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
-            0 => Ok(OpCode::OpReturn),
-            1 => Ok(OpCode::OpConstant),
-            2 => Ok(OpCode::OpNegate),
-            3 => Ok(OpCode::OpAdd),
-            4 => Ok(OpCode::OpSubtract),
-            5 => Ok(OpCode::OpMultiply),
-            6 => Ok(OpCode::OpDivide),
-            7 => Ok(OpCode::OpModulo),
+            0 => Ok(OpCode::Return),
+            1 => Ok(OpCode::Constant),
+            2 => Ok(OpCode::Negate),
+            3 => Ok(OpCode::Add),
+            4 => Ok(OpCode::Subtract),
+            5 => Ok(OpCode::Multiply),
+            6 => Ok(OpCode::Divide),
+            7 => Ok(OpCode::Modulo),
+            8 => Ok(OpCode::Greater),
+            9 => Ok(OpCode::GreaterEqual),
+            10 => Ok(OpCode::Less),
+            11 => Ok(OpCode::LessEqual),
+            12 => Ok(OpCode::Equal),
+            13 => Ok(OpCode::NotEqual),
             _ => Err(OpCodeError(value)),
         }
     }
