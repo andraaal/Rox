@@ -2,7 +2,7 @@ use crate::chunk::Chunk;
 use crate::chunk::OpCode::*;
 use crate::debug::print_chunk;
 use crate::scanner::Scanner;
-use crate::token::{Token, TokenType, TokenValue};
+use crate::token::{Token, TokenType};
 use crate::value::Value;
 use crate::vm::Vm;
 use std::borrow::Cow;
@@ -12,7 +12,7 @@ pub struct Parser<'a> {
     panicking: bool,
     scanner: Scanner<'a>,
     chunk: Chunk,
-    lookahead: Option<Token<'a>>,
+    lookahead: Option<Token>,
 }
 
 impl<'a> Parser<'a> {
@@ -20,7 +20,7 @@ impl<'a> Parser<'a> {
         Parser {
             had_error: false,
             panicking: false,
-            scanner: Scanner::new(s.as_bytes()),
+            scanner: Scanner::new(s),
             chunk: Chunk::new(s.len() / 30, s.len() / 50),
             lookahead: None,
         }
@@ -107,7 +107,7 @@ impl<'a> Parser<'a> {
             TokenType::Minus => self.emit_byte(Subtract as u8, operator.line),
             TokenType::Star => self.emit_byte(Multiply as u8, operator.line),
             TokenType::Slash => self.emit_byte(Divide as u8, operator.line),
-            TokenType::Percent => self.emit_byte(Modulo as u8, operator.line),
+            TokenType::Modulo => self.emit_byte(Modulo as u8, operator.line),
             TokenType::EqualEqual => self.emit_byte(Equal as u8, operator.line),
             TokenType::BangEqual => self.emit_byte(NotEqual as u8, operator.line),
             TokenType::Greater => self.emit_byte(Greater as u8, operator.line),
@@ -198,17 +198,16 @@ enum Precedence {
 
 struct Rule {
     precedence: Precedence,
-    prefix: Option<fn(&mut Parser<'_>, Token<'_>)>,
-    infix: Option<fn(&mut Parser<'_>, Token<'_>)>,
+    prefix: Option<fn(&mut Parser<'_>, Token)>,
+    infix: Option<fn(&mut Parser<'_>, Token)>,
 }
 
-const RULES_LENGTH: usize = TokenType::_TokenCount as usize; // TODO: use std::mem::variant_count when it becomes stable
 
 const fn get_rule(tkt: TokenType) -> &'static Rule {
     &RULES[tkt as usize]
 }
 
-const RULES: [Rule; RULES_LENGTH] = [
+const RULES: [Rule; 41] = [
     Rule {
         // Left Bracket
         precedence: Precedence::None,

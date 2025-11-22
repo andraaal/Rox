@@ -7,6 +7,7 @@ mod scanner;
 mod token;
 mod value;
 mod vm;
+mod object;
 
 fn main() {
     let mut args = std::env::args();

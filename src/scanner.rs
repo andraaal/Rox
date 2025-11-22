@@ -1,340 +1,225 @@
-use crate::token::{Token, TokenType, TokenValue};
+use crate::token::{Token, TokenType};
 
 #[derive(Debug)]
 pub struct Scanner<'a> {
-    source: &'a [u8],
-    current: usize,
-    line: usize,
+    source: std::iter::Peekable<std::str::Chars<'a>>,
+    pub tokens: Vec<Token>,
+    start: Location,
+    cur: Location,
 }
 
-#[derive(Debug, thiserror::Error)]
-#[error("[line: {line}]: {reason}")]
-pub struct ScannerError {
-    reason: String,
-    line: usize,
+
+#[derive(Debug, Copy, Clone)]
+pub struct Location {
+    pub line: usize,
+    pub col: usize,
+    pub index: usize,
 }
 
-impl<'a> Iterator for Scanner<'a> {
-    type Item = Result<Token<'a>, ScannerError>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.is_at_end() {
-            return None;
+impl<'a> Scanner<'a> {
+    pub(crate) fn new(source: &'a str) -> Self {
+        Scanner {
+            source: source.chars().peekable(),
+            tokens: Vec::new(),
+            start: Location {
+                line: 1,
+                col: 1,
+                index: 0,
+            },
+            cur: Location {
+                line: 1,
+                col: 1,
+                index: 0,
+            },
         }
-
-        if let Err(error_message) = self.skip_whitespace() {
-            return Some(Err(ScannerError {
-                reason: error_message,
-                line: self.line,
-            }));
+    }
+    
+    fn next(&mut self) -> Option<char> {
+        let c = self.source.next();
+        match c {
+            Some('\n') => {
+                self.cur.line += 1;
+                self.cur.col = 1;
+                self.cur.index += 1;
+            }
+            Some(_) => {
+                self.cur.col += 1;
+                self.cur.index += 1;
+            }
+            None => {}
         }
-        let ch = self.source[self.current];
-        self.current += 1;
+        c
+    }
 
-        let tk = match ch {
-            b'%' => self.make_token(TokenType::Percent),
-            b'(' => self.make_token(TokenType::LeftParenthesis),
-            b')' => self.make_token(TokenType::RightParenthesis),
-            b'{' => self.make_token(TokenType::LeftBrace),
-            b'}' => self.make_token(TokenType::RightBrace),
-            b',' => self.make_token(TokenType::Comma),
-            b'.' => self.make_token(TokenType::Dot),
-            b'-' => self.make_token(TokenType::Minus),
-            b'+' => self.make_token(TokenType::Plus),
-            b';' => self.make_token(TokenType::Semicolon),
-            b'*' => self.make_token(TokenType::Star),
-            b'/' => self.make_token(TokenType::Slash),
-            b'<' => {
-                if self.match_byte(b'=') {
-                    self.make_token(TokenType::LessEqual)
-                } else {
-                    self.make_token(TokenType::Less)
-                }
-            }
-            b'>' => {
-                if self.match_byte(b'=') {
-                    self.make_token(TokenType::GreaterEqual)
-                } else {
-                    self.make_token(TokenType::Greater)
-                }
-            }
-            b'!' => {
-                if self.match_byte(b'=') {
-                    self.make_token(TokenType::BangEqual)
-                } else {
-                    self.make_token(TokenType::Bang)
-                }
-            }
-            b'=' => {
-                if self.match_byte(b'=') {
-                    self.make_token(TokenType::EqualEqual)
-                } else {
-                    self.make_token(TokenType::Equal)
-                }
-            }
-            b'"' => {
-                let mut end = self.current;
-                while let Some(&c) = self.source.get(end) {
-                    match c {
-                        b'"' => {
-                            break;
-                        }
-                        b'\n' => {
-                            self.line += 1;
-                        }
-                        _ => {}
+    fn peek(&mut self) -> Option<&char> {
+        self.source.peek()
+    }
+
+    fn emit(&mut self, tkt: TokenType) {
+        let token = Token {
+            token_type: tkt,
+            start: self.start,
+            end: self.cur,
+        };
+        self.tokens.push(token);
+    }
+
+    pub fn lex(&mut self) {
+        while let Some(c) = self.next() {
+            match c {
+                '%' => self.emit(TokenType::Modulo),
+                '(' => self.emit(TokenType::LeftParenthesis),
+                ')' => self.emit(TokenType::RightParenthesis),
+                '{' => self.emit(TokenType::LeftBrace),
+                '}' => self.emit(TokenType::RightBrace),
+                '[' => self.emit(TokenType::LeftBracket),
+                ']' => self.emit(TokenType::RightBracket),
+                '.' => self.emit(TokenType::Dot),
+                ';' => self.emit(TokenType::Semicolon),
+                ',' => self.emit(TokenType::Comma),
+                '+' => self.emit(TokenType::Plus),
+                '-' => self.emit(TokenType::Minus),
+                '*' => self.emit(TokenType::Star),
+                '/' => self.emit(TokenType::Slash),
+                '<' => {
+                    if self.peek() == Some(&'=') {
+                        self.next();
+                        self.emit(TokenType::LessEqual);
+                    } else {
+                        self.emit(TokenType::Less);
                     }
-                    end += 1;
                 }
-                if !self.is_at_end() {
-                    let begin = self.current;
-                    self.current = end;
-                    self.make_token_with_content(
-                        TokenType::StringLiteral,
-                        TokenValue::StringLiteral(&self.source[begin - 1..end]),
-                    )
-                } else {
-                    return Some(Err(ScannerError {
-                        reason: "Unterminated string literal".to_string(),
-                        line: self.line,
-                    }));
-                }
-            }
-            b'0'..=b'9' => {
-                let mut level: u8 = 0;
-                let mut end = self.current;
-                while let Some(&c) = self.source.get(end) {
-                    if c == b'.' && level == 0 {
-                        end += 1;
-                        level = 1;
-                        continue;
+                '>' => {
+                    if self.peek() == Some(&'=') {
+                        self.next();
+                        self.emit(TokenType::GreaterEqual);
+                    } else {
+                        self.emit(TokenType::Greater);
                     }
-                    if (c == b'e' || c == b'E') && level < 2 {
-                        level = 2;
-                        end += 1;
-                        // optional + or - after exponent
-                        if let Some(&next) = self.source.get(end) {
-                            if next == b'+' || next == b'-' {
-                                end += 1;
+                }
+                '!' => {
+                    if self.peek() == Some(&'=') {
+                        self.next();
+                        self.emit(TokenType::BangEqual);
+                    } else {
+                        self.emit(TokenType::Bang);
+                    }
+                }
+                '=' => {
+                    if self.peek() == Some(&'=') {
+                        self.next();
+                        self.emit(TokenType::EqualEqual);
+                    } else {
+                        self.emit(TokenType::Equal);
+                    }
+                }
+                '"' => {
+                    let mut accumulator = String::new();
+                    while self.peek() != Some(&'"') {
+                        match self.next() {
+                            None => {
+                                self.emit(TokenType::Invalid(format!(
+                                    "[lexer] unterminated string literal at eof"
+                                )));
+                            }
+                            Some(cc) => accumulator.push(cc),
+                        }
+                    }
+                    self.next();
+                    self.emit(TokenType::StringLiteral(Box::new(accumulator)));
+                }
+                c => {
+                    if c.is_digit(10) {
+                        let mut accumulator = c.to_string();
+                        while let Some(cc) = self.peek().filter(|c| c.is_digit(10)) {
+                            accumulator.push(*cc);
+                            self.next();
+                        }
+                        if self.peek() == Some(&'.') {
+                            accumulator.push('.');
+                            while let Some(cc) = self.peek().filter(|c| c.is_digit(10)) {
+                                accumulator.push(*cc);
+                                self.next();
                             }
                         }
-                        // require at least one digit in exponent; if none, stop before 'e'
-                        if self.source.get(end).map_or(true, |&d| d < b'0' || d > b'9') {
-                            end -= 1;
-                            if let Some(&next) = self.source.get(end) {
-                                if next == b'+' || next == b'-' {
-                                    end -= 1;
+                        match accumulator.parse::<f64>() {
+                            Ok(f) => self.emit(TokenType::NumberLiteral(f)),
+                            Err(e) => self.emit(TokenType::Invalid(format!(
+                                "[lexer] invalid number format: {}",
+                                e
+                            ))),
+                        }
+                    } else if c.is_alphabetic() || c == '_' {
+                        let mut accumulator = c.to_string();
+                        while let Some(cc) = self
+                            .peek()
+                            .filter(|c| c.is_alphabetic() || c == &&'_' || c.is_digit(10))
+                        {
+                            accumulator.push(*cc);
+                            self.next();
+                        }
+                        match accumulator.as_str() {
+                            "and" => self.emit(TokenType::And),
+                            "class" => self.emit(TokenType::Class),
+                            "else" => self.emit(TokenType::Else),
+                            "false" => self.emit(TokenType::False),
+                            "for" => self.emit(TokenType::For),
+                            "fun" => self.emit(TokenType::Fun),
+                            "if" => self.emit(TokenType::If),
+                            "nil" => self.emit(TokenType::Nil),
+                            "or" => self.emit(TokenType::Or),
+                            "print" => self.emit(TokenType::Print),
+                            "return" => self.emit(TokenType::Return),
+                            "super" => self.emit(TokenType::Super),
+                            "this" => self.emit(TokenType::This),
+                            "true" => self.emit(TokenType::True),
+                            "var" => self.emit(TokenType::Var),
+                            "while" => self.emit(TokenType::While),
+                            _ => self.emit(TokenType::Identifier(accumulator)),
+                        }
+                    } else if c == '#' {
+                        let mut accumulator = String::new();
+                        if self.peek() == Some(&'(') {
+                            let mut depth = 1;
+                            loop {
+                                match self.next() {
+                                    None => {
+                                        self.emit(TokenType::Invalid(format!(
+                                            "[lexer] unterminated block comment at eof"
+                                        )));
+                                        return;
+                                    }
+                                    Some(c) => {
+                                        accumulator.push(c);
+                                        if c == '(' {
+                                            depth += 1;
+                                        } else if c == ')' {
+                                            depth -= 1;
+                                            if depth == 0 {
+                                                break;
+                                            }
+                                        }
+                                    }
                                 }
                             }
-                            break;
-                        }
-                        continue;
-                    }
-                    if c < b'0' || c > b'9' {
-                        end += 1;
-                        break;
-                    }
-                }
-
-                let num = String::from_utf8(self.source[self.current - 1..end].to_vec());
-                self.current = end;
-
-                if let Err(error_message) = num {
-                    return Some(Err(ScannerError {
-                        reason: error_message.to_string(),
-                        line: self.line,
-                    }));
-                } else {
-                    let parsed = num.unwrap().parse::<f64>();
-                    if let Err(error_message) = parsed {
-                        return Some(Err(ScannerError {
-                            reason: error_message.to_string(),
-                            line: self.line,
-                        }));
-                    } else {
-                        self.make_token_with_content(
-                            TokenType::NumberLiteral,
-                            TokenValue::NumberLiteral(std::borrow::Cow::Owned(parsed.unwrap())),
-                        )
-                    }
-                }
-            }
-            b'a'..=b'z' | b'A'..=b'Z' | b'_' => {
-                match ch {
-                    b'a' => self.match_keyword(b"nd", TokenType::And),
-                    b'c' => self.match_keyword(b"lass", TokenType::Class),
-                    b'e' => self.match_keyword(b"lse", TokenType::Else),
-
-                    b'f' => {
-                        if let Some(&next) = self.source.get(self.current) {
-                            match next {
-                                b'o' => self.match_keyword(b"or", TokenType::For),
-                                b'a' => self.match_keyword(b"alse", TokenType::False),
-                                b'u' => self.match_keyword(b"un", TokenType::Fun),
-                                _ => self.match_identifier(self.current),
-                            }
                         } else {
-                            self.match_identifier(self.current)
-                        }
-                    }
-
-                    b'i' => self.match_keyword(b"f", TokenType::If),
-                    b'n' => self.match_keyword(b"il", TokenType::Nil),
-                    b'o' => self.match_keyword(b"r", TokenType::Or),
-                    b'p' => self.match_keyword(b"rint", TokenType::Print),
-                    b'r' => self.match_keyword(b"eturn", TokenType::Return),
-                    b's' => self.match_keyword(b"uper", TokenType::Super),
-
-                    b't' => {
-                        if let Some(&next) = self.source.get(self.current) {
-                            match next {
-                                b'h' => self.match_keyword(b"his", TokenType::This),
-                                b'r' => self.match_keyword(b"rue", TokenType::True),
-                                _ => self.match_identifier(self.current),
+                            loop {
+                                match self.next() {
+                                    None | Some('\n') => break,
+                                    Some(cc) => accumulator.push(cc),
+                                }
                             }
-                        } else {
-                            self.match_identifier(self.current)
                         }
-                    }
-
-                    b'v' => self.match_keyword(b"ar", TokenType::Var),
-                    b'w' => self.match_keyword(b"hile", TokenType::While),
-
-                    // no keyword
-                    _ => self.match_identifier(self.current),
-                }
-            }
-            err => {
-                return Some(Err(ScannerError {
-                    reason: format!("Invalid character '{err}'"),
-                    line: self.line,
-                }));
-            }
-        };
-
-        Some(Ok(tk))
-    }
-}
-impl<'a> Scanner<'a> {
-    pub fn new(s: &'a [u8]) -> Self {
-        Scanner {
-            source: s,
-            current: 0,
-            line: 0,
-        }
-    }
-
-    fn is_at_end(&self) -> bool {
-        self.current >= self.source.len()
-    }
-
-    fn make_token(&self, ty: TokenType) -> Token<'a> {
-        Token {
-            token_type: ty,
-            line: self.line,
-            value: None,
-        }
-    }
-
-    fn make_token_with_content(&self, tk: TokenType, val: TokenValue<'a>) -> Token<'a> {
-        Token {
-            token_type: tk,
-            line: self.line,
-            value: Some(val),
-        }
-    }
-
-    fn match_byte(&mut self, ch: u8) -> bool {
-        if !self.is_at_end() && self.source[self.current] == ch {
-            self.current += 1;
-            true
-        } else {
-            false
-        }
-    }
-
-    fn skip_whitespace(&mut self) -> Result<(), String> {
-        while let Some(&c) = self.source.get(self.current) {
-            match c {
-                b' ' | b'\t' | b'\r' => {
-                    self.current += 1;
-                }
-                b'\n' => {
-                    self.line += 1;
-                    self.current += 1;
-                }
-                b'/' => {
-                    if self.source.get(self.current + 1).copied() == Some(b'/') {
-                        self.skip_line_comment();
-                    } else if self.source.get(self.current + 1).copied() == Some(b'*') {
-                        if let Err(err) = self.skip_block_comment() {
-                            return Err(err);
-                        }
+                        // Maybe I will do something with the comments in the future,
+                        // for now we will just let them go...
                     } else {
-                        break;
+                        self.emit(TokenType::Invalid(format!(
+                            "[lexer] unrecognized char: {}",
+                            c
+                        )));
                     }
                 }
-                _ => break,
             }
         }
-        Ok(())
-    }
-
-    fn skip_line_comment(&mut self) {
-        self.current += 2;
-        while !self.is_at_end() && self.source.get(self.current).copied() != Some(b'\n') {
-            self.current += 1;
-        }
-    }
-
-    fn skip_block_comment(&mut self) -> Result<(), String> {
-        self.current += 2;
-        let mut level = 1;
-        while level > 0 {
-            match self.source.get(self.current) {
-                Some(b'*') if self.source.get(self.current + 1).copied() == Some(b'/') => {
-                    self.current += 2;
-                    level -= 1;
-                }
-                Some(b'/') if self.source.get(self.current + 1).copied() == Some(b'*') => {
-                    self.current += 2;
-                    level += 1;
-                }
-                Some(b'\n') => {
-                    self.line += 1;
-                    self.current += 1;
-                }
-                Some(_) => {
-                    self.current += 1;
-                }
-                None => return Err(format!("Unterminated block comment: {}", self.line)),
-            }
-        }
-        Ok(())
-    }
-
-    fn match_keyword(&mut self, reference: &[u8], ttp: TokenType) -> Token<'a> {
-        let mut end = self.current;
-        for &c in reference {
-            if Some(c) != self.source.get(end).copied() {
-                return self.match_identifier(end);
-            }
-            end += 1;
-        }
-        self.current = end;
-        self.make_token(ttp)
-    }
-
-    // Maybe we already know a few characters and don't need to scan everything and thus => we can specify a custom start point
-    fn match_identifier(&mut self, mut end: usize) -> Token<'a> {
-        while let Some(&cha) = self.source.get(end) {
-            if !cha.is_ascii_alphanumeric() && cha != b'_' {
-                break;
-            }
-            end += 1;
-        }
-        let token_val = &self.source[self.current - 1..end];
-        self.current = end;
-        self.make_token_with_content(TokenType::Identifier, TokenValue::Identifier(token_val))
     }
 }
