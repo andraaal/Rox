@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 use TokenType::*;
 use crate::scanner::Location;
 
-#[derive(PartialEq, Debug)]
+#[derive(Debug, PartialEq)]
 pub enum TokenType {
     LeftBracket,
     RightBracket,
@@ -26,7 +26,7 @@ pub enum TokenType {
     Less,
     LessEqual,
     Identifier(String),
-    StringLiteral(Box<String>),
+    StringLiteral(String),
     NumberLiteral(f64),
     And,
     Class,

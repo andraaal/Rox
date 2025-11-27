@@ -8,6 +8,7 @@ mod token;
 mod value;
 mod vm;
 mod object;
+mod expr;
 
 fn main() {
     let mut args = std::env::args();

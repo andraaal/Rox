@@ -1,4 +1,5 @@
-use crate::chunk::{Chunk, OpCode};
+use crate::chunk::{Chunk};
+use crate::chunk::opcode::*;
 
 pub fn print_chunk(chunk: &Chunk, name: &str) {
     println!("=== {} ===", name);
@@ -19,25 +20,23 @@ pub fn print_instruction(chunk: &Chunk, offset: usize) -> usize {
         print!("{:04} {:>4} ", offset, line);
     }
 
-    let Ok(op) = OpCode::try_from(val) else {
-        panic!("Unknown opcode {}", val);
-    };
 
-    match op {
-        OpCode::Return => simple_instruction("RETURN", offset),
-        OpCode::Constant => constant_instruction("CONSTANT", chunk, offset),
-        OpCode::Negate => simple_instruction("NEGATE", offset),
-        OpCode::Add => simple_instruction("ADD", offset),
-        OpCode::Subtract => simple_instruction("SUBTRACT", offset),
-        OpCode::Multiply => simple_instruction("MULTIPLY", offset),
-        OpCode::Divide => simple_instruction("DIVIDE", offset),
-        OpCode::Modulo => simple_instruction("MODULO", offset),
-        OpCode::Greater => simple_instruction("GREATER", offset),
-        OpCode::GreaterEqual => simple_instruction("GREATER_EQUAL", offset),
-        OpCode::Less => simple_instruction("LESS", offset),
-        OpCode::LessEqual => simple_instruction("LESS_EQUAL", offset),
-        OpCode::Equal => simple_instruction("EQUAL", offset),
-        OpCode::NotEqual => simple_instruction("NOT_EQUAL", offset),
+    match val {
+        RETURN => simple_instruction("RETURN", offset),
+        CONSTANT => constant_instruction("CONSTANT", chunk, offset),
+        NEGATE => simple_instruction("NEGATE", offset),
+        ADD => simple_instruction("ADD", offset),
+        SUBTRACT => simple_instruction("SUBTRACT", offset),
+        MULTIPLY => simple_instruction("MULTIPLY", offset),
+        DIVIDE => simple_instruction("DIVIDE", offset),
+        MODULO => simple_instruction("MODULO", offset),
+        GREATER => simple_instruction("GREATER", offset),
+        GREATER_EQUAL => simple_instruction("GREATER_EQUAL", offset),
+        LESS => simple_instruction("LESS", offset),
+        LESS_EQUAL => simple_instruction("LESS_EQUAL", offset),
+        EQUAL => simple_instruction("EQUAL", offset),
+        NOT_EQUAL => simple_instruction("NOT_EQUAL", offset),
+        _ => simple_instruction("UNRECOGNIZED INSTRUCTION", offset),
     }
 }
 

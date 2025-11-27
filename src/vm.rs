@@ -1,7 +1,7 @@
-use crate::chunk::{Chunk, OpCode};
+use crate::chunk::{opcode, Chunk};
 use crate::compiler;
 use crate::debug::print_instruction;
-use crate::value::{Value, ValueType};
+use crate::value::Value;
 
 pub struct Vm {
     chunk: Chunk,
@@ -53,7 +53,7 @@ impl Vm {
             };
 
             match op {
-                OpCode::Return => {
+                opcode::RETURN => {
                     if self.stack.len() > 0 {
                         println!("{}", self.stack.pop().unwrap());
                     } else {
@@ -61,31 +61,32 @@ impl Vm {
                     }
                     return InterpretResult::InterpretOK;
                 }
-                OpCode::Constant => {
+                opcode::CONSTANT => {
                     let index = self.read_byte() as usize;
-                    let constant = self.chunk.constants()[index];
+                    let constant = Value::Nil; // self.chunk.constants()[index]; FIXME
                     self.stack.push(constant);
                 }
-                OpCode::Negate => {
+                opcode::NEGATE => {
                     let Some(x) = self.stack.last_mut() else {
                         return InterpretResult::InterpretRuntimeError(
                             "No value to perform operation on.",
                         );
                     };
-                    *x = Value::from(-1.0 * x.as_float());
+                    *x = Value::from(-1.0 * 1.0); //FIXME
                     // TODO Could optimize here, just need to change first bit
                 }
-                OpCode::Add => self.numeric_binary_operation(|a, b| Value::from(a + b)),
-                OpCode::Subtract => self.numeric_binary_operation(|a, b| Value::from(a - b)),
-                OpCode::Multiply => self.numeric_binary_operation(|a, b| Value::from(a * b)),
-                OpCode::Divide => self.numeric_binary_operation(|a, b| Value::from(a / b)),
-                OpCode::Modulo => self.numeric_binary_operation(|a, b| Value::from(a % b)),
-                OpCode::Greater => self.numeric_binary_operation(|a, b| Value::from(a > b)),
-                OpCode::GreaterEqual => self.numeric_binary_operation(|a, b| Value::from(a >= b)),
-                OpCode::Less => self.numeric_binary_operation(|a, b| Value::from(a < b)),
-                OpCode::LessEqual => self.numeric_binary_operation(|a, b| Value::from(a <= b)),
-                OpCode::Equal => self.binary_operation(|a, b| Value::from(a == b)),
-                OpCode::NotEqual => self.binary_operation(|a, b| Value::from(a != b)),
+                opcode::ADD => self.numeric_binary_operation(|a, b| Value::from(a + b)),
+                opcode::SUBTRACT => self.numeric_binary_operation(|a, b| Value::from(a - b)),
+                opcode::MULTIPLY => self.numeric_binary_operation(|a, b| Value::from(a * b)),
+                opcode::DIVIDE => self.numeric_binary_operation(|a, b| Value::from(a / b)),
+                opcode::MODULO => self.numeric_binary_operation(|a, b| Value::from(a % b)),
+                opcode::GREATER => self.numeric_binary_operation(|a, b| Value::from(a > b)),
+                opcode::GREATER_EQUAL => self.numeric_binary_operation(|a, b| Value::from(a >= b)),
+                opcode::LESS => self.numeric_binary_operation(|a, b| Value::from(a < b)),
+                opcode::LESS_EQUAL => self.numeric_binary_operation(|a, b| Value::from(a <= b)),
+                opcode::EQUAL => self.binary_operation(|a, b| Value::from(a == b)),
+                opcode::NOT_EQUAL => self.binary_operation(|a, b| Value::from(a != b)),
+                _ => todo!(),
             }
 
             // DEBUG begin
@@ -120,10 +121,13 @@ impl Vm {
     {
         let b = self.stack.pop().expect("No value to perform operation on.");
         let a = self.stack.pop().expect("No value to perform operation on.");
-        if !a.is(ValueType::Number) || !b.is(ValueType::Number) {
-            self.runtime_error("Both operands must be numbers");
+
+        match (a, b) {
+            (Value::Number(c), Value::Number(d)) => {
+                self.stack.push(callback(c, d));
+            }
+            _ => todo!(),
         }
-        self.stack.push(callback(a.as_float(), b.as_float()));
     }
 
     fn runtime_error(&mut self, message: &'static str) {

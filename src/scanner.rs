@@ -8,7 +8,6 @@ pub struct Scanner<'a> {
     cur: Location,
 }
 
-
 #[derive(Debug, Copy, Clone)]
 pub struct Location {
     pub line: usize,
@@ -33,7 +32,7 @@ impl<'a> Scanner<'a> {
             },
         }
     }
-    
+
     fn next(&mut self) -> Option<char> {
         let c = self.source.next();
         match c {
@@ -121,15 +120,18 @@ impl<'a> Scanner<'a> {
                                 self.emit(TokenType::Invalid(format!(
                                     "[lexer] unterminated string literal at eof"
                                 )));
+                                return;
                             }
                             Some(cc) => accumulator.push(cc),
                         }
                     }
                     self.next();
-                    self.emit(TokenType::StringLiteral(Box::new(accumulator)));
+                    self.emit(TokenType::StringLiteral(accumulator));
                 }
                 c => {
-                    if c.is_digit(10) {
+                    if c.is_whitespace() {
+                        // whitespace has no semantic meaning (aside from delimiting other tokens)
+                    } else if c.is_digit(10) {
                         let mut accumulator = c.to_string();
                         while let Some(cc) = self.peek().filter(|c| c.is_digit(10)) {
                             accumulator.push(*cc);
@@ -214,8 +216,10 @@ impl<'a> Scanner<'a> {
                         // for now we will just let them go...
                     } else {
                         self.emit(TokenType::Invalid(format!(
-                            "[lexer] unrecognized char: {}",
-                            c
+                            "[lexer] unrecognized char '{}' in line: {}, at: {}",
+                            c,
+                            self.cur.line,
+                            self.cur.col,
                         )));
                     }
                 }
