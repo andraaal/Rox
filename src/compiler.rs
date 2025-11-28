@@ -8,7 +8,7 @@ use std::vec::IntoIter;
 pub struct Parser {
     had_error: bool,
     tokens: Peekable<IntoIter<Token>>,
-    tree: Expr,
+    pub tree: Expr,
 }
 
 impl Parser {
@@ -20,14 +20,6 @@ impl Parser {
             tokens: scanner.tokens.into_iter().peekable(),
             tree: Expr::Null,
         }
-    }
-
-    fn report_error(&mut self, token: &Token, message: &str) {
-        eprintln!(
-            "[parser] {} in line {}, at {}",
-            message, token.start.line, token.start.col
-        );
-        self.had_error = true;
     }
 
     fn report_error_at(&mut self, loc: &Location, message: &str) {
@@ -45,9 +37,9 @@ impl Parser {
         self.had_error = true;
     }
 
-    pub fn compile(mut self) -> bool {
-        let expr = self.expression();
-        println!("{:?}", expr);
+    pub fn compile(&mut self) -> bool {
+        self.tree = self.expression();
+        println!("{:?}", self.tree);
         !self.had_error
     }
 
@@ -69,9 +61,8 @@ impl Parser {
         } else {
             self.report_error_at_end("Expected expression, but found EOF.");
         }
-        while let Some(token) = self
-            .tokens
-            .next_if(|tk| get_rule(&tk.token_type).infix >= precedence)
+        while let Some(token) =
+            self.next_token_if(|tk| get_rule(&tk.token_type).infix >= precedence)
         {
             if let Some(infix) = self.parse_infix(token.token_type, expr) {
                 expr = infix;
@@ -83,6 +74,10 @@ impl Parser {
         expr
     }
     // 53550127
+
+    fn next_token_if(&mut self, func: impl Fn(&Token) -> bool) -> Option<Token> {
+        self.tokens.next_if(func)
+    }
 
     fn next_token(&mut self) -> Option<Token> {
         loop {
@@ -109,7 +104,7 @@ impl Parser {
         }
     }
 
-    // prefix operators and constants: anything that doesn't need tokens that came before
+    // prefix operators and constants: anything that doesn't need the expr that came before
     fn parse_prefix(&mut self, tkt: TokenType) -> Option<Expr> {
         let expr = match tkt {
             TokenType::LeftParenthesis => {
@@ -118,7 +113,7 @@ impl Parser {
                 ex
             }
             TokenType::NumberLiteral(f) => Expr::Number(f),
-            TokenType::StringLiteral(s) => Expr::String(s.to_string()),
+            TokenType::StringLiteral(s) => Expr::String(s),
             TokenType::Nil => Expr::Null,
             TokenType::True => Expr::Bool(true),
             TokenType::False => Expr::Bool(false),
@@ -129,7 +124,7 @@ impl Parser {
         Some(expr)
     }
 
-    // infix, mixfix and postfix operators: They need access to the last token
+    // infix, mixfix and postfix operators: They need access to the expr before
     fn parse_infix(&mut self, tkt: TokenType, lhs: Expr) -> Option<Expr> {
         let expr = match tkt {
             TokenType::Slash => {
@@ -153,8 +148,28 @@ impl Parser {
                 Expr::Mod(Box::new(lhs), Box::new(rhs))
             }
             TokenType::BangEqual => {
-                let rhs = self.parse_precedence(Precedence::Unary);
+                let rhs = self.parse_precedence(Precedence::Term);
                 Expr::Neq(Box::new(lhs), Box::new(rhs))
+            }
+            TokenType::EqualEqual => {
+                let rhs = self.parse_precedence(Precedence::Term);
+                Expr::Eq(Box::new(lhs), Box::new(rhs))
+            }
+            TokenType::Greater => {
+                let rhs = self.parse_precedence(Precedence::Term);
+                Expr::Greater(Box::new(lhs), Box::new(rhs))
+            }
+            TokenType::GreaterEqual => {
+                let rhs = self.parse_precedence(Precedence::Term);
+                Expr::GreaterEqual(Box::new(lhs), Box::new(rhs))
+            }
+            TokenType::Less => {
+                let rhs = self.parse_precedence(Precedence::Term);
+                Expr::Less(Box::new(lhs), Box::new(rhs))
+            }
+            TokenType::LessEqual => {
+                let rhs = self.parse_precedence(Precedence::Term);
+                Expr::LessEqual(Box::new(lhs), Box::new(rhs))
             }
             _ => return None,
         };

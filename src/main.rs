@@ -1,4 +1,5 @@
 use crate::compiler::Parser;
+use crate::interpreter::Interpreter;
 
 mod chunk;
 mod compiler;
@@ -9,6 +10,7 @@ mod value;
 mod vm;
 mod object;
 mod expr;
+mod interpreter;
 
 fn main() {
     let mut args = std::env::args();
@@ -19,8 +21,10 @@ fn main() {
             return;
         }
         let file_content = std::fs::read_to_string(filename).expect("Couldn't read file");
-        let parser = Parser::new(&file_content);
+        let mut parser = Parser::new(&file_content);
         parser.compile();
+        let mut interpreter = Interpreter{};
+        interpreter.interpret(parser.tree);
     } else {
         println!("Rox v0.1");
         // REPL

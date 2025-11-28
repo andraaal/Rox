@@ -32,7 +32,7 @@ impl Vm {
 
     pub fn interpret(file: String) -> InterpretResult {
         let ch = Chunk::new(8, 4);
-        let parser = compiler::Parser::new(&file);
+        let mut parser = compiler::Parser::new(&file);
         let success = parser.compile();
         if !success {
             return InterpretResult::InterpretError("Error");
